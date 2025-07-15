@@ -1,85 +1,45 @@
-"""Telegram channel scraper using Telethon.
-
-This module provides `collect_channel` to fetch recent messages (optionally full
-history) from a channel and persist raw JSON snapshots in partitioned
-YYYY-MM-DD/<channel>.json format under data/raw.
-"""
-from __future__ import annotations
-
-import asyncio
-import json
-from datetime import datetime
+from telethon.sync import TelegramClient
 from pathlib import Path
-from typing import Sequence
+from datetime import datetime
+import json
 
-from telethon import TelegramClient, functions, types
-from telethon.errors.rpcerrorlist import ChannelInvalidError, ChannelPrivateError
-from telethon.tl.functions.messages import GetHistoryRequest
-from tqdm import tqdm
+# Replace these with your actual credentials
+api_id = 23969142
+api_hash = "63cfef12e419c6f4a413724fccd8dda9"
 
-from src.config import settings
-from src.utils.file_io import channel_slug, write_json_atomic
+client = TelegramClient('session', api_id, api_hash)
 
-DATE_FMT = "%Y-%m-%d"
+async def collect_From_channes(channel_username):
+    await client.start()
+    print(f"📥 Scraping messages from {channel_username}...")
 
+    all_data = []
 
-class ChannelScraper:
-    """Encapsulates scraping logic for a single Telethon client session."""
+    try:
+        async for msg in client.iter_messages(channel_username):
+            if msg.text:
+                all_data.append({
+                    "id": msg.id,
+                    "date": msg.date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "text": msg.text
+                })
 
-    def __init__(self, api_id: int, api_hash: str, session: str = "tk_session") -> None:
-        self.client = TelegramClient(session, api_id, api_hash)
+        print(f"✅ Scraped {len(all_data)} messages.")
 
-    async def __aenter__(self):  # type: ignore
-        await self.client.start()
-        return self
+        if not all_data:
+            print("⚠️ No messages found — nothing to save.")
+            return
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):  # type: ignore
-        await self.client.disconnect()
+        folder = Path("/home/samrawit/telegram-data-pipeline/data/raw") / datetime.now().strftime("%Y-%m-%d")
+        folder.mkdir(parents=True, exist_ok=True)
+        out_file = folder / f"{channel_username}.json"
 
-    async def fetch_history(self, channel: str, limit: int | None = None) -> list[dict]:
-        """Return message history for a channel as list of dictionaries."""
-        slug = channel_slug(channel)
-        try:
-            entity = await self.client.get_entity(channel)
-        except (ChannelInvalidError, ChannelPrivateError) as e:
-            print(f"[WARN] Could not access {channel} – {e}")
-            return []
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(all_data, f, indent=2, ensure_ascii=False)
+        print(f"✅ Saved to {out_file}")
 
-        messages: list[dict] = []
-        pbar = tqdm(total=limit or float("inf"), desc=f"Downloading {slug}")
+    except Exception as e:
+        print(f"❌ Error while scraping or saving: {e}")
 
-        async for msg in self.client.iter_messages(entity, limit=limit):  # type: ignore[attr-defined]
-            messages.append(msg.to_dict())  # pyright: ignore[reportUnknownMemberType]
-            pbar.update(1)
-
-        pbar.close()
-        return messages
-
-
-async def collect_From_channels(channels: Sequence[str], limit: int | None = None) -> None:
-    """Collect messages for multiple channels and persist to data lake."""
-    date_part = datetime.utcnow().strftime(DATE_FMT)
-    async with ChannelScraper(settings.api_id, settings.api_hash, settings.session_name) as scraper:
-        for ch in channels:
-            msgs = await scraper.fetch_history(ch, limit)
-            if not msgs:
-                continue
-            slug = channel_slug(ch)
-            out_path = Path(settings.data_dir) / "telegram_messages" / date_part / f"{slug}.json"
-            write_json_atomic(out_path, msgs)
-            print(f"Saved {len(msgs)} messages -> {out_path}")
-
-
-def main() -> None:  # pragma: no cover
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Telegram channel scraper")
-    parser.add_argument("channels", nargs="+", help="Channel usernames or links")
-    parser.add_argument("--limit", type=int, default=None, help="Maximum messages per channel")
-    args = parser.parse_args()
-
-    asyncio.run(collect_channels(args.channels, args.limit))
-
-
-if __name__ == "__main__":
-    main()
+    finally:
+        await client.disconnect()
