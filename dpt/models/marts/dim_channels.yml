@@ -1,0 +1,9 @@
+# models/marts/dim_channels.yml
+version: 2
+
+models:
+  - name: dim_channels
+    description: "Unique Telegram channels"
+    columns:
+      - name: channel_id
+        tests: [not_null, unique]

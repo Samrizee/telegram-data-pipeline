@@ -9,6 +9,8 @@ __pycache__/
 *.db
 
 *.json
-
+*.log
 *.pdf
+*.gpickle
 /data/
+*.msgpack
