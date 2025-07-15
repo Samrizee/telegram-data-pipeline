@@ -1,0 +1,10 @@
+# models/marts/dim_dates.yml
+version: 2
+
+models:
+  - name: dim_dates
+    description: "Calendar dimension"
+    columns:
+      - name: date_day
+        tests: [not_null, unique]
+
