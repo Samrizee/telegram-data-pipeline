@@ -2,3 +2,17 @@ name: dpt_project
 profile: TelegramPipline
 version: '1.0.0'
 config-version: 2
+
+model-paths: ["models"]
+seed-paths: ["/home/samrawit/telegram-data-pipeline/data/clean/preprocessed.csv"] 
+
+
+seeds:
+  dpt_project:
+    image_detections:
+      file: prepared.csv
+      column_types:
+        detection_id: text
+        message_id: text
+        detected_object_class: text
+        confidence_score: float8
